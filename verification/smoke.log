@@ -1,0 +1,23 @@
+npm notice run icbc-border-trade-chain@1.0.0 test:smoke
+npm notice run node scripts/run-smoke.mjs
+
+Running 11 tests using 1 worker
+
+(node:33852) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+production: core UI chain and smoke completed in 1.7s
+  ok  1 e2e\demo.spec.ts:21:3 › production: 八工作区及核心验收链 (1.8s)
+  ok  2 e2e\demo.spec.ts:70:3 › production: 修改参数贯穿规则、草案、金融需求；确认后生效 (996ms)
+single-file-http: core UI chain and smoke completed in 1.7s
+  ok  3 e2e\demo.spec.ts:21:3 › single-file-http: 八工作区及核心验收链 (1.7s)
+  ok  4 e2e\demo.spec.ts:70:3 › single-file-http: 修改参数贯穿规则、草案、金融需求；确认后生效 (1.0s)
+single-file-offline: core UI chain and smoke completed in 1.6s
+  ok  5 e2e\demo.spec.ts:21:3 › single-file-offline: 八工作区及核心验收链 (1.7s)
+  ok  6 e2e\demo.spec.ts:70:3 › single-file-offline: 修改参数贯穿规则、草案、金融需求；确认后生效 (1.1s)
+  ok  7 e2e\release.spec.ts:10:3 › production: 三场景链接、回执独立、事件不重放 (853ms)
+  ok  8 e2e\release.spec.ts:45:3 › production: 手机八工作区无页面横向溢出 (831ms)
+  ok  9 e2e\release.spec.ts:10:3 › offline: 三场景链接、回执独立、事件不重放 (886ms)
+  ok 10 e2e\release.spec.ts:45:3 › offline: 手机八工作区无页面横向溢出 (786ms)
+  ok 11 e2e\release.spec.ts:63:1 › 计划书截图：同一生产构建的三个实际页面 (531ms)
+
+  11 passed (13.1s)

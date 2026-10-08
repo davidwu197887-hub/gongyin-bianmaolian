@@ -1,0 +1,23 @@
+{
+  "at": "2026-10-08T04:15:25.545Z",
+  "passed": true,
+  "localHttps": true,
+  "selfSignedCertificate": true,
+  "publiclyDeployed": false,
+  "scenes": [
+    {
+      "scene": "compare",
+      "passed": true
+    },
+    {
+      "scene": "recalculate",
+      "passed": true
+    },
+    {
+      "scene": "translate",
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "externalRequests": []
+}

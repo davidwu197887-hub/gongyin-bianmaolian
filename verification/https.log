@@ -1,0 +1,25 @@
+npm notice run icbc-border-trade-chain@1.0.0 test:https
+npm notice run node scripts/https-smoke.mjs
+{
+  "at": "2026-10-08T04:15:25.545Z",
+  "passed": true,
+  "localHttps": true,
+  "selfSignedCertificate": true,
+  "publiclyDeployed": false,
+  "scenes": [
+    {
+      "scene": "compare",
+      "passed": true
+    },
+    {
+      "scene": "recalculate",
+      "passed": true
+    },
+    {
+      "scene": "translate",
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "externalRequests": []
+}

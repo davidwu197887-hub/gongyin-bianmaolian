@@ -1,0 +1,11 @@
+2026-10-08: rendered from actual verification/rehearsal-results.json
+0.198s: 联合测算：模拟参数与甲乙现金流
+18.447s: A/B对比：甲少赚约0.67万元，换取周转支持下一笔经营
+46.182s: 选择B，生成Rule-V1；甲乙按责确认并生效
+63.557s: Day20：188吨验收、12吨在途；借款85.76万元
+79.766s: Day25：首批104.34万元回款、借款结清、现金18.35万元
+96.280s: 乙提出剩余12吨账期5→15日；Draft-V2独立保存；Rule-V1仍有效
+116.501s: 翻译为金融需求：经营语言→现金流影响→经营结果→金融语言
+138.715s: 提交mockBankApi：仅返回PENDING_BANK_REVIEW，银行独立审批
+149.911s: M01明白账：1吨、5000/5200元、200元尾款；组织结余不等于分红
+Completed: 163.242s; browser errors: 0; final bank status: PENDING_BANK_REVIEW

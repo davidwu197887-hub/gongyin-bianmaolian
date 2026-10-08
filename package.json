@@ -1,0 +1,36 @@
+{
+  "name": "icbc-border-trade-chain",
+  "private": true,
+  "version": "1.0.0",
+  "description": "工银边贸链——边民互市经营协同与金融需求适配平台（竞赛原型｜模拟数据）",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc && vite build && node scripts/generate-demo.mjs",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "test:smoke": "node scripts/run-smoke.mjs",
+    "audit:source": "node scripts/source-audit.mjs",
+    "demo:rehearsal": "node scripts/run-rehearsal.mjs --headed",
+    "test:https": "node scripts/https-smoke.mjs"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "esbuild": "0.28.2",
+    "typescript": "^5.5.3",
+    "vite": "8.3.3",
+    "vitest": "5.0.3"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

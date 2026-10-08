@@ -1,0 +1,11 @@
+npm notice run icbc-border-trade-chain@1.0.0 test
+npm notice run vitest run
+
+ RUN  v5.0.3 C:/Users/hp/Documents/Codex/2026-10-07/react-typescript-vite-1-zip-zip/outputs/工银边贸链_经营金融联合决策台
+
+
+ Test Files  3 passed (3)
+      Tests  97 passed (97)
+   Start at  12:15:05
+   Duration  439ms (transform 48%, import 39%, tests 7%, worker 6%)
+

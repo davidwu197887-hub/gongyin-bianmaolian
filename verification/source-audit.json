@@ -1,0 +1,75 @@
+{
+  "at": "2026-10-08T04:15:09.830Z",
+  "passed": true,
+  "formalSourceFiles": 28,
+  "resolvedRelativeImports": 70,
+  "sourceSha256": "9890b0a9fa8cb17f523adf2304cb1236763a82002333ceeb6c5aa704569f5bc6",
+  "demoSameSource": true,
+  "violations": [],
+  "math": {
+    "a": {
+      "jia": 5.443287671232877,
+      "yi": 9.76986301369863,
+      "combined": 15.213150684931508,
+      "peak": 86
+    },
+    "b": {
+      "jia": 4.773150684931506,
+      "yi": 10.394520547945206,
+      "combined": 15.167671232876712,
+      "peak": 86
+    },
+    "split": {
+      "loanDay20": 85.76,
+      "cashDay25": 18.35328219178082,
+      "cashDay35": 24.773282191780822
+    },
+    "need": {
+      "needId": "0xc17648a8",
+      "subject": "合作组织甲",
+      "trigger": "审计复算",
+      "amount": 1.89,
+      "amountUnit": "万元",
+      "startDay": 35,
+      "expectedEndDay": 45,
+      "expectedDurationDays": 10,
+      "purpose": "下一笔原料经营安排（短期周转）",
+      "repaymentSource": "Day45批次B2销售回款6.66万元",
+      "repaymentAmount": 6.66,
+      "expectedRepaymentDay": 45,
+      "previousFinancingStatus": "已结清",
+      "affectsExistingFacility": false,
+      "createsNewFinancialNeed": true,
+      "suggestedNeedCategory": "短期经营周转类需求",
+      "requiredMaterials": [
+        "有效交易合同",
+        "条件变更草案（Draft-V2）",
+        "履约记录（分批验收/付款回执）",
+        "最新现金流测算",
+        "预计回款依据"
+      ],
+      "cashFlowImpact": {
+        "beforeCash": 24.77,
+        "afterCash": 18.11,
+        "requirement": 20,
+        "gap": 1.89,
+        "beforeGap": 0,
+        "incrementalGap": 1.89,
+        "changeOnReceiptDelay": 6.66
+      }
+    },
+    "bank": {
+      "received": true,
+      "status": "PENDING_BANK_REVIEW",
+      "message": "金融需求材料已提交，最终产品适配与授信由银行独立审核",
+      "requestId": "REQ-0x0417839c",
+      "submittedAt": "2026-10-08T04:15:09.829Z",
+      "echo": {
+        "subject": "合作组织甲",
+        "amount": 1.89,
+        "startDay": 35,
+        "category": "短期经营周转类需求"
+      }
+    }
+  }
+}
