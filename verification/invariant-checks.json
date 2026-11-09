@@ -1,0 +1,150 @@
+{
+  "status": "PASS",
+  "checks": 12,
+  "results": [
+    {
+      "name": "全情景资金守恒、批次、额度与数量约束",
+      "status": "PASS",
+      "detail": {
+        "tracedPaths": 96000,
+        "plannedPaths": 96000,
+        "dayRows": 17376000,
+        "maxConservation": 1.1641532182693481e-10,
+        "delayedPurchasePaths": 56546
+      }
+    },
+    {
+      "name": "规划口径：甲峰值17.064→30.672万元，对照20万元额度待筹10.672万元",
+      "status": "PASS",
+      "detail": {
+        "before": 17.064,
+        "after": 30.672,
+        "waiting": 10.672
+      }
+    },
+    {
+      "name": "受限执行（甲乙各20万元、第120日到期）：第五批采购40→42日，回款65→68日，甲清偿44→54日",
+      "status": "PASS",
+      "detail": {
+        "purchase5": [
+          40,
+          42
+        ],
+        "receipt5": [
+          65,
+          68
+        ],
+        "clearA": [
+          44,
+          54
+        ],
+        "execPeakA": [
+          17.064,
+          17.464
+        ]
+      }
+    },
+    {
+      "name": "条件依赖：第五批顺延40→42日只在额度约束下发生；甲清偿44→54日在规划口径下同样成立",
+      "status": "PASS",
+      "detail": {
+        "planningClearA": [
+          44,
+          54
+        ],
+        "planningPurchase5": 40,
+        "planningReceipt5": 65
+      }
+    },
+    {
+      "name": "第20日已核验台账：甲本金14.664万元，无草案时无待筹额",
+      "status": "PASS",
+      "detail": {
+        "existingDebt": 14.664,
+        "waiting": 0
+      }
+    },
+    {
+      "name": "重算后金融需求：峰值、增量、待筹、压力窗口、回款与清偿日期",
+      "status": "PASS",
+      "detail": {
+        "amount": 10.672,
+        "window": [
+          40,
+          42
+        ],
+        "clear": [
+          44,
+          54
+        ],
+        "draft": "Draft-V2"
+      }
+    },
+    {
+      "name": "零新增融资时独立发起风险核查，完成后不改变额度与历史",
+      "status": "PASS",
+      "detail": {
+        "status": "REVIEW_COMPLETED",
+        "followUpDay": 25
+      }
+    },
+    {
+      "name": "融资需求：补件→重新核查→模拟批准→回执，状态与权限边界",
+      "status": "PASS",
+      "detail": {
+        "trail": [
+          "PENDING_BANK_REVIEW",
+          "NEEDS_MATERIAL",
+          "PENDING_BANK_REVIEW",
+          "APPROVED",
+          "EXECUTED"
+        ],
+        "facility": {
+          "day": 21,
+          "party": "A",
+          "limit": 310000,
+          "maturityDay": 120
+        }
+      }
+    },
+    {
+      "name": "成员明白账：第8日验收后应付100元，支付回执核验后实付100元",
+      "status": "PASS",
+      "detail": {
+        "before": "已形成应付，待支付回执",
+        "after": "已支付（模拟回执已核验）"
+      }
+    },
+    {
+      "name": "蒙特卡洛受限执行：12000条基准情景 P50/P90/P95 与 Python 研究结果一致",
+      "status": "PASS",
+      "detail": {
+        "paths": 12000,
+        "A50": 17.136,
+        "A90": 17.5984,
+        "A95": 17.6792,
+        "B90": 20,
+        "coverage": 99.80833333333334,
+        "completed": 100
+      }
+    },
+    {
+      "name": "第20日历史匹配：保留3969条，原安排与草案共用样本，P50/P90 与 Python 一致",
+      "status": "PASS",
+      "detail": {
+        "retained": 3969,
+        "originalA50": 17.1,
+        "draftA50": 30.672,
+        "draftA90": 30.7584
+      }
+    },
+    {
+      "name": "温和/严峻情景可运行且严峻情景甲P90不低于温和情景",
+      "status": "PASS",
+      "detail": {
+        "mildA90": 32.388,
+        "severeA90": 47.064
+      }
+    }
+  ]
+}

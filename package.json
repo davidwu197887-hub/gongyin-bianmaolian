@@ -1,20 +1,20 @@
 {
   "name": "icbc-border-trade-chain",
   "private": true,
-  "version": "1.0.0",
-  "description": "工银边贸链——边民互市经营协同与金融需求适配平台（竞赛原型｜模拟数据）",
+  "version": "2.0.0",
+  "description": "边民互市五批经营协同与金融需求联动演示",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "build": "tsc && vite build && node scripts/generate-demo.mjs",
-    "preview": "vite preview --host 127.0.0.1",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "dev": "vite --host 0.0.0.0",
+    "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
-    "test:smoke": "node scripts/run-smoke.mjs",
-    "audit:source": "node scripts/source-audit.mjs",
-    "demo:rehearsal": "node scripts/run-rehearsal.mjs --headed",
-    "test:https": "node scripts/https-smoke.mjs"
+    "test": "node scripts/check-model.mjs && node scripts/check-workflow.mjs",
+    "test:model": "node scripts/check-model.mjs",
+    "test:study": "node scripts/check-study.mjs",
+    "preview": "vite preview --host 127.0.0.1 --port 4173",
+    "test:invariants": "node scripts/check-invariants.mjs",
+    "test:crosscheck": "node scripts/check-crosscheck.mjs",
+    "test:e2e": "playwright test && node scripts/sanitize-e2e-report.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
