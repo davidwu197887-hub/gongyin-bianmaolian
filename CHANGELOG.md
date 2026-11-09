@@ -1,6 +1,32 @@
 # 版本说明与新旧差异
 
-## 版本来源核验（2026-11-09）
+## 3.0.0（2026-11-09，`feature/financing-mode-v3`，基于 2.0 分支 `1c0eebc`）
+
+### 新增
+
+- 引擎：可选的批次专项额度 `Config.tranche`（TS）与 `simulate(..., financing=)`（Python）。专项只能由甲用于指定批次的采购及该批成员尾款；不循环；在提款窗口内、无欠息、还款来源批次已验收且付款日早于到期日、当日乙对甲无逾期应付时才可提；先用现金和一般额度；日终回笼先还专项。新增结果字段 `general_peak_A`、`tranche_*`。
+- Python 端补齐 2.0 只在 TS 中存在的 `facility_changes`。
+- 流程：`financingPlan()`、`confirmReceivable()`、`reviewSignals()`、`arrangements()`、`execConfig()`；`submitBank()` 增加融资结构参数，`bankDecision()` 增加专项条件参数，`acknowledgeBank()` 写入 `state.tranche`。专项只在其依据规则生效后进入执行投影。
+- 防错：同一业务依据不能重复申请融资；专项存续期间不能再申请；银行条件超出还款来源或用途、到期日早于还款来源付款日或晚于一般额度到期日时拒绝；乙未确认应付时不能批准；经营角色不能作出或回填银行结论。
+- 页面（并入"金融转译与核查"）：融资支持方案说明、提款前条件、确定性安排对照、计算线程情景对照、银行专项条件输入、按获批条件执行的前后对照、复核提示。
+- 履约台账：专项提款与归还的模拟银行凭证。
+- 快捷场景 `?scene=financing`、`?scene=financing-stress`。
+- 研究脚本 `model/financing_study.py` 及对照脚本；测试 `scripts/check-financing.mjs`、`check-financing-study.mjs`、`check-financing-crosscheck.mjs`、`e2e/financing.spec.ts`。
+- 文档 `docs/v3/`。
+
+### 未改变
+
+- 2.0 的参数、情景样本、30条参考路径、2874个研究字段、12项不变量与33项流程检查全部保持；不传入专项时引擎计算与 2.0 逐位相同。
+- 一般额度调整（2.0 的31万元模拟批准流程）作为可选融资结构保留。
+
+### 兼容性
+
+- 本地存储改为 `bianmao.v3`（`schema: 3`），不读取 2.0 的 `bianmao.v2` 记录。
+- 单文件 HTML 约1.95MB。
+
+## 2.0.0
+
+### 版本来源核验（2026-11-09）
 
 | 对象 | 核验方式 | 结论 |
 | --- | --- | --- |
@@ -10,7 +36,7 @@
 | 复现包前端源码 | 在独立目录 `npm ci` 后重新 `npm run build` | 生成的 HTML 与交付 HTML 字节一致，源码完整且可独立构建 |
 | 复现包 Python 模型 | `export_web_reference.py` 重新生成前端情景输入与参考路径 | `src/scenarios.ts`、`tests/reference.json` 去除换行差异后与交付文件一致；`verification/reference_model.py` 与 `joint_model.py` 字节一致 |
 
-## 新增功能（2.0）
+### 新增功能（2.0）
 
 - 五批连续采购（32、44、36、48、40吨）的逐日事件仿真，甲乙双主体分别记账，付息准备金、计息、结息、清偿和额度到期分别处理（`src/engine.ts`）。
 - 规划口径（不设额度，识别维持采购日历的资金需要）与受限执行口径（甲乙各20万元、第120日到期）分开计算。
@@ -24,7 +50,7 @@
 - Python 离线参考模型（`model/`）及与前端共用的情景样本和30条参考路径。
 - `?scene=risk` 快捷场景；浏览器本地保存演示状态（`localStorage` 键 `bianmao.v2`，`schema: 2`）。
 
-## 修改的功能
+### 修改的功能
 
 | 项目 | v1.0（main） | v2.0（本分支） |
 | --- | --- | --- |
@@ -37,7 +63,7 @@
 | 工程结构 | Vite 多文件构建，`dist/index.html`＋`assets/` | esbuild 单文件构建，`dist/index.html` 内嵌脚本、样式、计算线程与情景数据（1 916 000 字节） |
 | 测试 | vitest 单元测试、Playwright smoke/rehearsal、HTTPS 与源码审计脚本 | node 断言脚本：参考路径、业务流程、情景研究；本分支补充不变量、逐路径对照与 Playwright 浏览器测试 |
 
-## 保留的功能与口径
+### 保留的功能与口径
 
 - 八个工作区：联合测算、方案对比、共同规则、履约台账、变化重算、金融转译与核查、成员明白账、版本与留痕。
 - `Rule-V1` 为首个有效规则；变更以 `Draft-V2` 等草案形式提出，甲乙均确认后才生效，草案依据变化时拒绝生效。
@@ -47,7 +73,7 @@
 - 快捷场景 `?scene=compare`、`?scene=recalculate`、`?scene=translate`。
 - 页面顶部始终标明“竞赛原型 · 模拟业务与银行回执”，融资审批与实际支付由银行独立办理。
 
-## 可能退化或需要注意的事项
+### 可能退化或需要注意的事项
 
 - v1.0 的 `&capture=1` 截图模式在 v2.0 中不存在。
 - v1.0 的 vitest 单元测试、红队测试、HTTPS smoke 和源码审计脚本未随 v2.0 交付；这些文件保留在 `0fb4914` 历史中，未移植到新引擎。
@@ -56,7 +82,7 @@
 - 手机宽度下宽表格在表格容器内横向滚动，页面本身无横向溢出；“业务说明”列的长文字需要横向滑动查看。
 - 单文件 HTML 约1.9MB，情景数据在页面和计算线程中各内嵌一份。
 
-## 数据结构兼容性
+### 数据结构兼容性
 
 v2.0 未提供 v1.0 对象的读取或迁移代码。v1.0 的状态只保存在内存中，刷新即重置；v2.0 只读取 `localStorage` 中 `bianmao.v2` 且 `schema === 2` 的记录，因此没有需要迁移的旧版存储数据。若后续模块需要 v1.0 的 `FinancialNeed` 字段，可按下表从 `translateNeed()` 结果换算：
 

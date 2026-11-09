@@ -104,20 +104,33 @@ class Wallet:
         self.last_clear=np.full(n,-1,int)
         self.peak=np.zeros(n);self.overdue_interest_seen=np.zeros(n,bool)
         self.draw_enabled=np.ones(n,bool)
-    def funds(self):
-        cap=np.maximum(self.limit-self.debt,0)
-        return self.cash+np.where(self.draw_enabled,cap,0)
-    def pay(self,amount,mask,full=True,eligible=True):
+        # v3 batch tranche: tdebt is the tranche part of debt; tlimit=0 keeps v2 arithmetic.
+        self.tlimit=0;self.tdebt=np.zeros(n);self.tdraws=np.zeros(n)
+        self.tpeak=np.zeros(n);self.gpeak=np.zeros(n)
+    def general(self):
+        return np.where(self.draw_enabled,np.maximum(self.limit-(self.debt-self.tdebt),0),0)
+    def funds(self,tranche=None):
+        if not self.tlimit:
+            cap=np.maximum(self.limit-self.debt,0)
+            return self.cash+np.where(self.draw_enabled,cap,0)
+        room=np.maximum(self.tlimit-self.tdraws,0)
+        return self.cash+self.general()+(0 if tranche is None else np.where(tranche,room,0))
+    def pay(self,amount,mask,full=True,eligible=True,tranche=None):
         amount=np.asarray(amount,float)
-        available=self.funds() if eligible else self.cash
+        available=self.funds(tranche) if eligible else self.cash
         if full:
             paid=np.where(mask&(available+1e-7>=amount),amount,0)
         else:paid=np.where(mask,np.minimum(amount,available),0)
         draw=np.maximum(paid-self.cash,0)
         assert eligible or np.all(draw<1e-7)
+        if self.tlimit and tranche is not None:
+            # General headroom first; only the remainder uses the tranche.
+            t=np.where(tranche&(draw>0),np.maximum(draw-self.general(),0),0)
+            self.tdebt+=t;self.tdraws+=t;self.tpeak=np.maximum(self.tpeak,self.tdebt)
         self.debt+=draw;self.draws+=draw
         self.cash+=draw-paid
         self.peak=np.maximum(self.peak,self.debt)
+        self.gpeak=np.maximum(self.gpeak,self.debt-self.tdebt)
         return paid
     def settle_interest(self,mask,day):
         amount=np.where(mask,self.accrued+self.interest_due,0)
@@ -140,6 +153,7 @@ class Wallet:
             self.settle_interest(self.interest_due>1e-7,day)
         repay=np.minimum(self.cash,self.debt)
         self.cash-=repay;self.debt-=repay;self.repays+=repay
+        if self.tlimit:self.tdebt=np.maximum(self.tdebt-repay,0)
         # Agreed close-out of accrued interest when this borrowing episode clears.
         cleared=(repay>1e-7)&(self.debt<1e-7)
         self.settle_interest(cleared,day)
@@ -149,9 +163,13 @@ class Wallet:
             self.draw_enabled&=self.interest_due<1e-7
         self.draw_enabled&=day<expiry
         assert np.all(self.cash>=-1e-5) and np.all(self.reserve>=-1e-5)
-        assert np.all(self.debt<=self.limit+1e-5)
+        assert np.all(self.debt-self.tdebt<=self.limit+1e-5)
+        assert not self.tlimit or np.all(self.tdraws<=self.tlimit+1e-5)
 
-def simulate(p:Plan,c:Config,s:dict,snapshot_day=20,trace=False):
+def simulate(p:Plan,c:Config,s:dict,snapshot_day=20,trace=False,financing=None):
+    """financing (v3, optional) mirrors Config.facility_changes / Config.tranche in engine.ts:
+    {'facility_changes':[{day,party,limit,maturityDay}], 'tranche':{party:'A',limit,batches,
+    openDay,closeDay,maturityDay,sourceBatch,overdueCheck,freezeGeneralOnOverdue}}. None keeps v2."""
     q=s['q'];n,b=q.shape;row=np.arange(n);H=c.horizon
     assert b==5 and np.allclose(q.sum(1),200)
     assert 0<=p.prepay_fraction<1
@@ -177,6 +195,18 @@ def simulate(p:Plan,c:Config,s:dict,snapshot_day=20,trace=False):
     business_last_open=np.full(n,-1,int)
     rows=[];sig=np.zeros(n,np.uint64);snapshot=None;peak_history=[]
     A_flow_cost=np.zeros(n);B_proc_cost=np.zeros(n)
+    financing=financing or {}
+    changes=financing.get('facility_changes') or []
+    T=financing.get('tranche')
+    expiry={'A':c.limit_expiry,'B':c.limit_expiry}
+    tranche_ok=None;tail_ok=None;tbatches=[]
+    if T:
+        assert T['party']=='A' and T['limit']>0 and T['openDay']<=T['closeDay']<T['maturityDay']
+        assert 0<=T['sourceBatch']<=4 and T['sourceBatch'] not in T['batches']
+        assert T['overdueCheck'] in ('none','internal','chain')
+        A.tlimit=T['limit'];tbatches=list(T['batches'])
+    t_due_mat=np.zeros(n);t_overdue_days=np.zeros(n,int);t_blocked_days=np.zeros(n,int)
+    t_first=np.full(n,-1,int);t_clear=np.full(n,-1,int)
 
     def joint_peak():
         nonlocal peak_joint
@@ -202,8 +232,9 @@ def simulate(p:Plan,c:Config,s:dict,snapshot_day=20,trace=False):
             cost=totalq*(c.prepaid_per_tonne+c.logistics_per_tonne)+c.setup_per_purchase
             use_locked=locked[:,group].sum(1)
             need=cost-use_locked
-            feasible=ready&(A.funds()+1e-7>=need)
-            paid=A.pay(need,feasible,full=True)
+            use_t=tranche_ok if T and all(k in tbatches for k in group) else None
+            feasible=ready&(A.funds(use_t)+1e-7>=need)
+            paid=A.pay(need,feasible,full=True,tranche=use_t)
             completed=feasible&(paid+1e-5>=need)
             Aexternal+=np.where(completed,cost,0)
             A_flow_cost+=np.where(completed,totalq*c.logistics_per_tonne+c.setup_per_purchase,0)
@@ -229,7 +260,9 @@ def simulate(p:Plan,c:Config,s:dict,snapshot_day=20,trace=False):
         # Member commodity tails first; an unpaid obligation remains outstanding.
         for j in range(b):
             due=q[:,j]*(c.member_total_per_tonne-c.prepaid_per_tonne)-tail_paid[:,j]
-            paid=A.pay(np.maximum(due,0),accepted[:,j]&(due>1e-7),full=False)
+            # v3: the tranche also covers the member tail of its own batch (same approved purpose).
+            use_t=tail_ok if T and j in tbatches else None
+            paid=A.pay(np.maximum(due,0),accepted[:,j]&(due>1e-7),full=False,tranche=use_t)
             tail_paid[:,j]+=paid;Aexternal+=paid
         for j in range(b):
             due=extra_due[:,j]-extra_paid[:,j]
@@ -289,11 +322,31 @@ def simulate(p:Plan,c:Config,s:dict,snapshot_day=20,trace=False):
                          tail_unpaid=float(np.where(accepted[0],q[0]*(c.member_total_per_tonne-c.prepaid_per_tonne)-tail_paid[0],0).sum())))
 
     for day in range(H+1):
-        for w in (A,B):
+        for ch in changes:
+            if ch['day']==day:
+                w=A if ch['party']=='A' else B
+                w.limit=ch['limit'];expiry[ch['party']]=ch['maturityDay']
+                w.draw_enabled=(day<ch['maturityDay'])&((not c.freeze_new_draw_on_overdue_interest)|(w.interest_due<1e-7))
+        for w,k in ((A,'A'),(B,'B')):
             if day:
                 charge=w.debt*w.rate/365
                 w.accrued+=charge;w.interest_total+=charge
-            w.draw_enabled &= day<c.limit_expiry
+            w.draw_enabled &= day<expiry[k]
+        if T:
+            # Start-of-day drawdown conditions; tranche principal left after maturity is overdue.
+            if day==T['maturityDay']:t_due_mat=A.tdebt.copy()
+            if day>T['maturityDay']:
+                od=A.tdebt>1e-7;t_overdue_days+=od
+                if T['freezeGeneralOnOverdue']:A.draw_enabled&=~od
+            internal=np.any(accepted&(internal_due<day)&(q*p.price-advance_paid-invoice_paid>1e-7),axis=1)
+            chain=internal|np.any(finished&(~down_paid)&(external_due<day),axis=1)
+            overdue={'chain':chain,'internal':internal}.get(T['overdueCheck'],np.zeros(n,bool))
+            sb=T['sourceBatch']
+            source=accepted[:,sb]&(internal_due[:,sb]<T['maturityDay'])
+            # All tranche draws, including the batch's member tail, stay inside the drawdown window.
+            window=T['openDay']<=day<=T['closeDay'] and day<T['maturityDay']
+            tail_ok=window&(A.interest_due<1e-7)&(A.tdraws<T['limit']-1e-7)
+            tranche_ok=window&(A.interest_due<1e-7)&(A.tdraws<T['limit']-1e-7)&source&~overdue
         if c.external_receipt_before_cutoff:external_receipts(day)
         pay_A_obligations(day)
         try_advances(day)
@@ -337,8 +390,14 @@ def simulate(p:Plan,c:Config,s:dict,snapshot_day=20,trace=False):
         start_processing(day)
         record(day,'16_transfer')
         if not c.external_receipt_before_cutoff:external_receipts(day)
-        for w in (A,B):w.close_day(day,c.limit_expiry,c.freeze_new_draw_on_overdue_interest)
+        for w,k in ((A,'A'),(B,'B')):w.close_day(day,expiry[k],c.freeze_new_draw_on_overdue_interest)
         joint_peak()
+        if T:
+            if T['openDay']<=day<=T['closeDay']:
+                waiting=np.any((ordered[:,tbatches]<0)&(earliest[tbatches][None,:]<=day),axis=1)
+                t_blocked_days+=(~tranche_ok)&waiting
+            t_first[(t_first<0)&(A.tdraws>1e-7)]=day
+            t_clear[(t_first>=0)&(t_clear<0)&(A.tdebt<1e-7)]=day
         any_A|=A.debt>1e-7;any_B|=B.debt>1e-7
         activeA=(A.debt+A.accrued+A.interest_due)>1e-7
         activeB=(B.debt+B.accrued+B.interest_due)>1e-7
@@ -409,7 +468,12 @@ def simulate(p:Plan,c:Config,s:dict,snapshot_day=20,trace=False):
         actual_internal_paid=invoice_paid+advance_paid,actual_tail_paid=tail_paid,
         counterfactual=p.counterfactual,rule_id=p.rule_id,config=asdict(c),plan=asdict(p),
         A_external=Aexternal,B_external=Bexternal_out,external_in=external_in,
-        conservation_max_abs_error=float(np.max(np.abs(balances-expected))))
+        conservation_max_abs_error=float(np.max(np.abs(balances-expected))),
+        general_peak_A=A.gpeak if T else A.peak,tranche_limit=np.full(n,float(T['limit'] if T else 0)),
+        tranche_draws=A.tdraws,tranche_peak=A.tpeak,tranche_debt=A.tdebt,
+        tranche_due_at_maturity=t_due_mat,tranche_overdue_days=t_overdue_days,
+        tranche_blocked_days=t_blocked_days,tranche_first_draw_day=t_first,
+        tranche_clear_day=np.where(t_first<0,-1,np.where(t_clear<0,np.inf,t_clear)))
     if trace:
         import pandas as pd
         results['trace']=pd.DataFrame(rows)

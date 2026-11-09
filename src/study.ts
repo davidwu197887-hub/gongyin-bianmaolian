@@ -155,3 +155,113 @@ export function study(
     generatedAt: new Date().toISOString(),
   };
 }
+// ---- 3.0 融资安排对照：同一组情景（可按第20日历史匹配）比较多种安排 ----
+export interface FinancingArrangement {
+  key: string;
+  label: string;
+  plan: Plan;
+  config: Config;
+  extra: { kind: "none" | "general" | "tranche"; amount: number; from: number; to: number };
+}
+export interface FinancingRequest {
+  kind: "financing";
+  base: Plan;
+  baseConfig: Config;
+  arrangements: FinancingArrangement[];
+  target: number;
+  regime: Regime;
+  paths: number;
+  observedDay: number | null;
+}
+const extraDays = (a: FinancingArrangement["extra"], r: Result) =>
+  a.kind === "none"
+    ? 0
+    : a.kind === "general"
+      ? (a.amount / 10000) * (a.to - a.from)
+      : (a.amount / 10000) *
+        ((r.tranche_first_draw_day < 0
+          ? a.to + 1
+          : Number.isFinite(r.tranche_clear_day)
+            ? r.tranche_clear_day
+            : 181) -
+          a.from);
+export function financingStudy(
+  req: FinancingRequest,
+  progress?: (n: number, total: number) => void,
+) {
+  const pack = scenarioInputs[req.regime],
+    n = Math.min(req.paths, pack.n),
+    snapshotDay = req.observedDay ?? 20;
+  const ref =
+    req.observedDay === null
+      ? null
+      : simulate(req.base, req.baseConfig, deterministic(), {
+          snapshotDay,
+          collectPrefix: true,
+        })!;
+  const acc = req.arrangements.map(() => [] as any[]);
+  let retained = 0,
+    maximumError = 0;
+  for (let i = 0; i < n; i++) {
+    const s = sampleAt(req.regime, i);
+    const opt = { snapshotDay, referencePrefix: ref?.prefix };
+    if (ref && !simulate(req.base, req.baseConfig, s, opt)) continue;
+    retained++;
+    req.arrangements.forEach((a, k) => {
+      const r = simulate(a.plan, a.config, s, opt);
+      if (!r) throw Error(a.label + "改变了已观察历史");
+      maximumError = Math.max(maximumError, r.conservation_max_abs_error);
+      const o5 = r.order_days[req.target];
+      acc[k].push({
+        onPlan: r.pending_purchase_days === 0,
+        purchase: o5 < 0 ? Infinity : o5,
+        grace: r.late_finished_tonnes > 0,
+        peakA: r.peak_A,
+        generalA: r.general_peak_A,
+        peakB: r.peak_B,
+        intA: r.interest_A,
+        intB: r.interest_B,
+        clearA: r.settlement_day_A,
+        drawn: r.tranche_draws > 1e-7,
+        blocked: r.tranche_blocked_days > 0,
+        overdue: r.tranche_overdue_days > 0,
+        extra: extraDays(a.extra, r),
+      });
+    });
+    if (i % 250 === 0) progress?.(i, n);
+  }
+  const pct = (xs: any[], k: string) =>
+    xs.length ? (xs.filter((x) => x[k]).length / xs.length) * 100 : null;
+  const mean = (xs: any[], k: string) =>
+    xs.length ? xs.reduce((a, x) => a + x[k], 0) / xs.length : null;
+  const q90 = (xs: any[], k: string) => quantile(xs.map((x) => x[k]), 0.9);
+  return {
+    kind: "financing",
+    inputs: { regime: req.regime, paths: n, observedDay: req.observedDay },
+    paths: n,
+    retained,
+    seed: pack.seed,
+    maximumError,
+    rows: req.arrangements.map((a, k) => {
+      const xs = acc[k];
+      return {
+        key: a.key,
+        label: a.label,
+        on_plan_pct: pct(xs, "onPlan"),
+        purchase_p90: q90(xs, "purchase"),
+        late_beyond_grace_pct: pct(xs, "grace"),
+        peak_A_p90: q90(xs, "peakA"),
+        general_peak_A_p90: q90(xs, "generalA"),
+        peak_B_p90: q90(xs, "peakB"),
+        interest_A_mean: mean(xs, "intA"),
+        interest_B_mean: mean(xs, "intB"),
+        clear_A_p90: q90(xs, "clearA"),
+        tranche_drawn_pct: a.extra.kind === "tranche" ? pct(xs, "drawn") : null,
+        tranche_blocked_pct: a.extra.kind === "tranche" ? pct(xs, "blocked") : null,
+        tranche_overdue_pct: a.extra.kind === "tranche" ? pct(xs, "overdue") : null,
+        extra_limit_wan_days_mean: mean(xs, "extra"),
+      };
+    }),
+    generatedAt: new Date().toISOString(),
+  };
+}

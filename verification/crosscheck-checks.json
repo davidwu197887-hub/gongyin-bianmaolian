@@ -5,7 +5,7 @@
   "comparedValues": 5568000,
   "maxAbsDifference": 0,
   "tolerance": 0.00002,
-  "elapsedSeconds": 37.143,
+  "elapsedSeconds": 81.104,
   "summary": [
     "base/短账期/plan: 12000",
     "base/短账期/execute: 12000",

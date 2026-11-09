@@ -52,6 +52,8 @@ const date = (n: any) =>
 const num = (n: any, d = 2) =>
   n === null || !Number.isFinite(n) ? "—" : Number(n).toFixed(d);
 const clone = <T,>(x: T): T => structuredClone(x);
+// 3.0 本地存储（schema 3，增加批次专项与应付确认）；不读取 2.0 的 bianmao.v2 记录。
+const STORE = "bianmao.v3";
 const PREVIEW = simulate(plans[0], defaultConfig, deterministic(), {
   trace: true,
 })!;
@@ -92,14 +94,17 @@ function seeded(
 function initial() {
   const query = new URLSearchParams(location.search),
     scene = query.get("scene");
-  if (["recalculate", "translate", "risk"].includes(scene ?? ""))
+  // 3.0：下游持续拖欠压力下的专项演示（第20日草案已提出）。
+  if (scene === "financing-stress")
+    return seeded(defaultConfig, plans[0], true, true);
+  if (["recalculate", "translate", "risk", "financing"].includes(scene ?? ""))
     return seeded(defaultConfig, plans[0], false, scene !== "risk");
   try {
-    const raw = localStorage.getItem("bianmao.v2");
+    const raw = localStorage.getItem(STORE);
     if (raw) {
       const data = JSON.parse(raw);
-      if (data.schema === 2 && data.state?.audit && data.state?.facilityChanges)
-        return data.state;
+      if (data.schema === 3 && data.state?.audit && data.state?.facilityChanges)
+        return { tranche: null, confirmations: [], ...data.state };
     }
   } catch {}
   return wf.emptyState();
@@ -288,7 +293,7 @@ function App() {
           ? 1
           : scene === "recalculate"
             ? 4
-            : scene === "translate"
+            : scene === "translate" || scene?.startsWith("financing")
               ? 5
               : scene === "risk"
                 ? 1
@@ -310,6 +315,12 @@ function App() {
     [feedback, setFeedback] = useState(""),
     [materials, setMaterials] = useState(""),
     [approvedLimit, setApprovedLimit] = useState(31),
+    [structure, setStructure] = useState<wf.Structure>(
+      scene?.startsWith("financing") ? "TRANCHE" : "GENERAL",
+    ),
+    [terms, setTerms] = useState<wf.TrancheTerms | null>(null),
+    [finRisk, setFinRisk] = useState<any>(null),
+    [finProgress, setFinProgress] = useState<{ done: number; total: number } | null>(null),
     [caseFocus, setCaseFocus] = useState<string | null>(null);
   const [regime, setRegime] = useState<"base" | "mild" | "severe">("base"),
     [paths, setPaths] = useState(12000),
@@ -337,13 +348,15 @@ function App() {
         : simulate(candidatePlan, config, deterministic(freeze), {
             trace: true,
           })!,
-    [s.effective, s.facilityChanges, candidate, config, freeze],
+    [s.effective, s.facilityChanges, s.tranche, candidate, config, freeze],
   );
   const current = projection.days[s.day] ?? projection.days[0],
     schedule = useMemo(
       () =>
-        s.effective ? wf.evidenceSchedule(s.effective, s.facilityChanges) : [],
-      [s.effective, s.facilityChanges],
+        s.effective
+          ? wf.evidenceSchedule(s.effective, s.facilityChanges, s.tranche)
+          : [],
+      [s.effective, s.facilityChanges, s.tranche],
     );
   const actuals = s.evidence.filter(
       (x) => x.status === "已核验" && x.day <= s.day,
@@ -353,6 +366,76 @@ function App() {
     () => (s.effective ? wf.translateNeed(s, subject, kind) : null),
     [s, subject, kind],
   );
+  // 3.0 融资支持方案（模拟）：方案说明、安排对照、复核提示均由同一引擎计算。
+  const fplan = useMemo(
+    () => (s.effective && subject === "A" ? wf.financingPlan(s) : null),
+    [s, subject],
+  );
+  const arrangementRows = useMemo(() => {
+    if (!fplan) return [];
+    return wf.arrangements(s, fplan).map((a) => {
+      const r = simulate(a.plan, a.config, deterministic(s.effective!.freeze))!;
+      return { a, r, extra: wf.extraLimitDays(a.extra, r) };
+    });
+  }, [s.effective, s.draft, s.facilityChanges, s.day, fplan]);
+  const signals = useMemo(() => wf.reviewSignals(s), [s]);
+  useEffect(() => {
+    if (fplan?.applicable)
+      setTerms((t) =>
+        t ?? {
+          limit: fplan.upper,
+          closeDay: fplan.closeDay,
+          maturityDay: fplan.maturityDay,
+        },
+      );
+    else setTerms(null);
+  }, [fplan?.applicable, fplan?.ruleHash]);
+  function runFinancing() {
+    try {
+      if (!fplan?.applicable || !s.effective) throw Error("当前没有可对照的专项方案");
+      if (s.effective.freeze)
+        throw Error("持续拖欠使用单独的确定性压力情景，请在基准业务下运行情景对照");
+      const rolling = actuals.some((x) => x.id === "close-20");
+      const request = {
+        kind: "financing",
+        base: s.effective.plan,
+        baseConfig: { ...s.effective.config, facility_changes: [], tranche: null },
+        arrangements: wf.arrangements(s, fplan),
+        target: fplan.targetBatch,
+        regime: "base",
+        paths: 12000,
+        observedDay: rolling ? 20 : null,
+      };
+      worker.current?.terminate();
+      const url = URL.createObjectURL(
+        new Blob([WORKER_CODE], { type: "text/javascript" }),
+      );
+      worker.current = new Worker(url);
+      URL.revokeObjectURL(url);
+      const id = ++job.current;
+      setFinProgress({ done: 0, total: 12000 });
+      setError("");
+      worker.current.onmessage = (e) => {
+        if (e.data.id !== job.current) return;
+        if (e.data.progress) setFinProgress(e.data.progress);
+        if (e.data.error) {
+          setError(e.data.error);
+          setFinProgress(null);
+        }
+        if (e.data.result) {
+          setFinRisk({ ...e.data.result, ruleHash: fplan.ruleHash });
+          setFinProgress(null);
+        }
+      };
+      worker.current.onerror = (e) => {
+        setError(e.message || "情景计算未完成，请重试");
+        setFinProgress(null);
+      };
+      worker.current.postMessage({ id, request });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
   const m = wf.memberView(s, memberBatch),
     focused =
       s.cases.find((x) => x.id === caseFocus) ?? s.cases[s.cases.length - 1];
@@ -379,20 +462,17 @@ function App() {
             beforeExec: wf.execution(s),
             afterExec: simulate(
               s.draft.plan,
-              { ...s.effective.config, facility_changes: s.facilityChanges },
+              wf.execConfig(s, s.draft),
               deterministic(s.effective.freeze),
               { trace: true },
             )!,
           }
         : null,
-    [s.effective, s.draft, s.facilityChanges],
+    [s.effective, s.draft, s.facilityChanges, s.tranche],
   );
   useEffect(() => {
     try {
-      localStorage.setItem(
-        "bianmao.v2",
-        JSON.stringify({ schema: 2, state: s }),
-      );
+      localStorage.setItem(STORE, JSON.stringify({ schema: 3, state: s }));
     } catch {}
   }, [s]);
   useEffect(
@@ -461,6 +541,9 @@ function App() {
     job.current++;
     setProgress(null);
     setRisk(null);
+    setFinRisk(null);
+    setFinProgress(null);
+    setTerms(null);
     setS(wf.emptyState());
     setConfig(clone(defaultConfig));
     setCandidate(clone(plans[0]));
@@ -470,7 +553,7 @@ function App() {
     setError("");
     setToast("演示数据已重置");
     try {
-      localStorage.removeItem("bianmao.v2");
+      localStorage.removeItem(STORE);
     } catch {}
   }
   function runRisk() {
@@ -1694,16 +1777,41 @@ function App() {
                     </option>
                   </select>
                 </label>
+                {kind === "FINANCING" && subject === "A" && (
+                  <label>
+                    融资结构
+                    <select
+                      aria-label="融资结构"
+                      value={structure}
+                      onChange={(e) => setStructure(e.target.value as wf.Structure)}
+                    >
+                      <option value="GENERAL">一般额度调整</option>
+                      <option value="TRANCHE">批次专项提款</option>
+                    </select>
+                  </label>
+                )}
                 <button
                   disabled={s.role === "MEMBER"}
                   onClick={() =>
                     action(
-                      () => wf.submitBank(s, subject, kind),
+                      () =>
+                        wf.submitBank(
+                          s,
+                          subject,
+                          kind,
+                          kind === "FINANCING" && subject === "A"
+                            ? structure
+                            : "GENERAL",
+                        ),
                       "已提交模拟银行办理；合同确认状态独立保留",
                     )
                   }
                 >
-                  {kind === "FINANCING" ? "提交融资需求包" : "发起风险核查"}
+                  {kind === "RISK_REVIEW"
+                    ? "发起风险核查"
+                    : structure === "TRANCHE" && subject === "A"
+                      ? "提交专项提款方案"
+                      : "提交融资需求包"}
                 </button>
               </div>
               {need && (
@@ -1762,7 +1870,9 @@ function App() {
                           "提交的新增融资金额",
                           kind === "RISK_REVIEW"
                             ? "0元，提交风险核查事项"
-                            : money(need.amount, 3) + "万元（需求说明）",
+                            : need.party === "A" && s.tranche && s.day < s.tranche.maturityDay
+                              ? `${money(need.amount, 3)}万元缺口已由获批专项${money(s.tranche.limit, 3)}万元覆盖（${s.tranche.receiptId}），不再重复申请`
+                              : money(need.amount, 3) + "万元（需求说明）",
                         ],
                         ["用款环节", need.purpose],
                         [
@@ -1799,6 +1909,134 @@ function App() {
                   </Panel>
                 </>
               )}
+              {fplan && kind === "FINANCING" && (
+                <Panel
+                  title="融资支持方案说明（批次专项提款·模拟）"
+                  subtitle="平台整理缺口形态、可核验的还款来源和提款条件；额度、期限、产品形式与是否批准由银行决定。"
+                  action={
+                    fplan.applicable && s.role === "FACTORY" ? (
+                      <button
+                        className="small"
+                        onClick={() =>
+                          action(
+                            () => wf.confirmReceivable(s),
+                            "乙已确认还款来源批次的应付金额与付款日",
+                          )
+                        }
+                      >
+                        确认第{fplan.sourceBatch! + 1}批应付
+                      </button>
+                    ) : null
+                  }
+                >
+                  {fplan.applicable ? (
+                    <>
+                      <Table
+                        headers={["项目", "方案说明"]}
+                        rows={[
+                          ["适用主体", "合作组织甲（须为依法登记、可作借款人的主体；互助组和边民个人不在本安排内）"],
+                          [
+                            "缺口形态",
+                            `${fplan.version}下，现有额度使第${fplan.targetBatch! + 1}批采购由${date(fplan.plannedDay)}顺延至${date(fplan.delayedDay)}；对照现有额度待筹峰值${money(fplan.lower, 3)}万元`,
+                          ],
+                          [
+                            "借款用途",
+                            `第${fplan.targetBatch! + 1}批收购预付款、物流与组织费，以及该批验收后的成员尾款；受托支付至收款方（${money(fplan.purposeAmount, 3)}万元）`,
+                          ],
+                          [
+                            "还款来源",
+                            `第${fplan.sourceBatch! + 1}批${date(fplan.sourceAcceptDay)}验收，乙应于${date(fplan.sourceDueDay)}付甲${money(fplan.receivable, 3)}万元；进入回笼账户后优先归还专项`,
+                          ],
+                          [
+                            "额度区间",
+                            `下限${money(fplan.lower, 3)}万元（确定性待筹峰值）至上限${money(fplan.upper, 3)}万元（还款来源与用途的较小者）；银行另按企业整体经营测算`,
+                          ],
+                          [
+                            "期限与提款",
+                            `回执次日（${date(fplan.openDay)}）起可提，${date(fplan.closeDay)}提款截止，${date(fplan.maturityDay)}到期；不循环；先用现金和一般额度，不足部分才动用专项`,
+                          ],
+                        ]}
+                      />
+                      <h4 className="subhead">提款前条件</h4>
+                      <Table
+                        headers={["条件", "状态", "说明"]}
+                        rows={fplan.conditions.map((c) => [
+                          c.label + (c.daily ? "（提款日逐日判定）" : ""),
+                          <Tag tone={c.status === "满足" ? "green" : c.status === "待满足" ? "amber" : "red"}>
+                            {c.status}
+                          </Tag>,
+                          c.note,
+                        ])}
+                      />
+                    </>
+                  ) : (
+                    <p className="footnote">{fplan.reason}</p>
+                  )}
+                  {fplan.applicable && (
+                    <>
+                      <h4 className="subhead">融资安排对照（确定性基准，受限执行）</h4>
+                      <Table
+                        headers={["安排", "第" + (fplan.targetBatch! + 1) + "批采购", "成品回款", "甲借款峰值", "其中专项", "甲利息（元）", "甲清偿", "额外承诺（万元·日）"]}
+                        rows={arrangementRows.map(({ a, r, extra }) => [
+                          a.label,
+                          date(r.order_days[fplan.targetBatch!]),
+                          date(r.external_receipt_days[fplan.targetBatch!]),
+                          money(r.peak_A, 3),
+                          a.extra.kind === "tranche" ? money(r.tranche_peak, 3) : "—",
+                          num(r.interest_A),
+                          date(r.settlement_day_A),
+                          num(extra, 1),
+                        ])}
+                      />
+                      <div className="toolbar">
+                        <button
+                          className="secondary"
+                          disabled={!!finProgress}
+                          onClick={runFinancing}
+                        >
+                          {actuals.some((x) => x.id === "close-20")
+                            ? "在第20日历史匹配情景中对照"
+                            : "在12000条情景中对照"}
+                        </button>
+                        {finProgress && (
+                          <span className="muted">
+                            计算中 {finProgress.done.toLocaleString()} / {finProgress.total.toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                      {finRisk && finRisk.ruleHash === fplan.ruleHash && (
+                        <>
+                          <p className="muted">
+                            共{finRisk.paths.toLocaleString()}条情景路径
+                            {finRisk.inputs.observedDay !== null
+                              ? `，按第${finRisk.inputs.observedDay}日已核验历史匹配后保留${finRisk.retained.toLocaleString()}条`
+                              : ""}
+                            ；各安排使用同一组路径。
+                          </p>
+                          <Table
+                            headers={["安排", "五批按计划采购", "超宽限交付", "甲峰值P90", "其中一般额度P90", "甲平均利息（元）", "乙平均利息（元）", "专项被提用", "专项条件受阻", "额外承诺（万元·日）"]}
+                            rows={finRisk.rows.map((x: any) => [
+                              x.label,
+                              num(x.on_plan_pct, 1) + "%",
+                              num(x.late_beyond_grace_pct, 1) + "%",
+                              money(x.peak_A_p90),
+                              money(x.general_peak_A_p90),
+                              num(x.interest_A_mean, 1),
+                              num(x.interest_B_mean, 1),
+                              x.tranche_drawn_pct === null ? "—" : num(x.tranche_drawn_pct, 1) + "%",
+                              x.tranche_blocked_pct === null ? "—" : num(x.tranche_blocked_pct, 1) + "%",
+                              num(x.extra_limit_wan_days_mean, 0),
+                            ])}
+                          />
+                        </>
+                      )}
+                      <p className="footnote">
+                        改善与代价同时列示：提额或专项让采购按计划进行，同时增加甲的借款与利息；专项受还款来源条件约束，第3批未按时验收的路径不能提用。情景分布为演示假设，结果是给定模型下的模拟表现，不代表真实融资效果或违约概率。额外承诺用于比较银行额度占用期，不等于资本成本。
+                      </p>
+                    </>
+                  )}
+                </Panel>
+              )}
               <Panel
                 title="银行办理与反馈"
                 subtitle="切换客户经理视图处理模拟核查；客户补充材料后重新提交。"
@@ -1824,7 +2062,12 @@ function App() {
                           key={x.id}
                           onClick={() => setCaseFocus(x.id)}
                         >
-                          {x.kind === "FINANCING" ? "融资" : "核查"} ·{" "}
+                          {x.kind === "FINANCING"
+                            ? x.structure === "TRANCHE"
+                              ? "专项"
+                              : "融资"
+                            : "核查"}{" "}
+                          ·{" "}
                           {x.party === "A" ? "甲" : "乙"} · {STATUS[x.status]}
                         </button>
                       ))}
@@ -1855,12 +2098,19 @@ function App() {
                             ],
                             ["核查意见", focused.feedback || "等待银行核查"],
                             ["已补充材料", focused.materials || "尚无补充记录"],
-                            [
-                              "模拟获批总额度",
-                              focused.approvedLimit === null
-                                ? "—"
-                                : money(focused.approvedLimit) + "万元",
-                            ],
+                            focused.structure === "TRANCHE"
+                              ? [
+                                  "模拟获批专项",
+                                  focused.terms
+                                    ? `${money(focused.terms.limit, 3)}万元；${date(focused.plan?.openDay)}起可提，${date(focused.terms.closeDay)}截止，${date(focused.terms.maturityDay)}到期；只用于第${(focused.plan?.targetBatch ?? 0) + 1}批采购及尾款`
+                                    : "—",
+                                ]
+                              : [
+                                  "模拟获批总额度",
+                                  focused.approvedLimit === null
+                                    ? "—"
+                                    : money(focused.approvedLimit) + "万元",
+                                ],
                             [
                               "后续跟踪日",
                               focused.followUpDay === null
@@ -1905,17 +2155,57 @@ function App() {
                               </button>
                               {focused.kind === "FINANCING" ? (
                                 <>
-                                  <label>
-                                    拟回填获批总额度（万元）
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      value={approvedLimit}
-                                      onChange={(e) =>
-                                        setApprovedLimit(Number(e.target.value))
-                                      }
-                                    />
-                                  </label>
+                                  {focused.structure === "TRANCHE" ? (
+                                    <>
+                                      <label>
+                                        专项额度（万元）
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          step="0.001"
+                                          aria-label="专项额度"
+                                          value={terms ? +(terms.limit / 10000).toFixed(3) : ""}
+                                          onChange={(e) =>
+                                            setTerms((t) => t && { ...t, limit: Math.round(Number(e.target.value) * 10000) })
+                                          }
+                                        />
+                                      </label>
+                                      <label>
+                                        提款截止日
+                                        <input
+                                          type="number"
+                                          aria-label="提款截止日"
+                                          value={terms?.closeDay ?? ""}
+                                          onChange={(e) =>
+                                            setTerms((t) => t && { ...t, closeDay: Number(e.target.value) })
+                                          }
+                                        />
+                                      </label>
+                                      <label>
+                                        到期日
+                                        <input
+                                          type="number"
+                                          aria-label="专项到期日"
+                                          value={terms?.maturityDay ?? ""}
+                                          onChange={(e) =>
+                                            setTerms((t) => t && { ...t, maturityDay: Number(e.target.value) })
+                                          }
+                                        />
+                                      </label>
+                                    </>
+                                  ) : (
+                                    <label>
+                                      拟回填获批总额度（万元）
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        value={approvedLimit}
+                                        onChange={(e) =>
+                                          setApprovedLimit(Number(e.target.value))
+                                        }
+                                      />
+                                    </label>
+                                  )}
                                   <button
                                     disabled={
                                       ![
@@ -1930,7 +2220,8 @@ function App() {
                                           focused.id,
                                           "APPROVED",
                                           feedback,
-                                          approvedLimit * 10000,
+                                          focused.structure === "TRANCHE" ? null : approvedLimit * 10000,
+                                          focused.structure === "TRANCHE" ? terms : null,
                                         ),
                                       )
                                     }
@@ -1991,7 +2282,9 @@ function App() {
                                 onClick={() =>
                                   action(
                                     () => wf.acknowledgeBank(s, focused.id),
-                                    focused.kind === "FINANCING"
+                                    focused.structure === "TRANCHE"
+                                      ? "回执已回填；专项自下一日可提，相关规则生效后进入执行投影"
+                                      : focused.kind === "FINANCING"
                                       ? "回执已回填；获批条件用于下一日及之后的执行投影"
                                       : "核查意见、办理回执和后续跟踪事项已记录",
                                   )
@@ -2035,6 +2328,66 @@ function App() {
                   </div>
                 )}
               </Panel>
+              {(s.tranche || signals.length > 0) && (
+                <Panel
+                  title="按获批条件执行与复核提示"
+                  subtitle="提款、归还按执行投影生成模拟凭证；复核提示只供客户经理判断，不改变额度、借款或审批状态。"
+                  action={
+                    s.role === "BANK" && signals.length ? (
+                      <button
+                        className="secondary small"
+                        onClick={() =>
+                          action(
+                            () => wf.submitBank(s, "A", "RISK_REVIEW"),
+                            "已依据复核提示发起风险核查",
+                          )
+                        }
+                      >
+                        依据提示发起风险核查
+                      </button>
+                    ) : null
+                  }
+                >
+                  {s.tranche && (() => {
+                    const live = s.tranche.ruleHash === s.effective!.hash,
+                      before = simulate(
+                        (s.draft ?? s.effective!).plan,
+                        { ...s.effective!.config, facility_changes: s.facilityChanges, tranche: null },
+                        deterministic(s.effective!.freeze),
+                      )!,
+                      after = live ? projection : draftResults?.afterExec ?? projection,
+                      j = s.tranche.batches[0];
+                    return (
+                      <>
+                        <Table
+                          headers={["项目", "获批前（现有额度）", "按获批条件"]}
+                          rows={[
+                            ["专项状态", "—", live ? `已进入执行投影；${date(s.tranche.openDay)}起可提，${date(s.tranche.closeDay)}截止，${date(s.tranche.maturityDay)}到期` : "已回填回执；相关规则生效后进入执行投影"],
+                            [`第${j + 1}批采购`, date(before.order_days[j]), date(after.order_days[j])],
+                            [`第${j + 1}批成品回款`, date(before.external_receipt_days[j]), date(after.external_receipt_days[j])],
+                            ["专项提款 / 归还", "—", after.tranche_first_draw_day >= 0 ? `${date(after.tranche_first_draw_day)}提用${money(after.tranche_draws, 3)}万元；${date(after.tranche_clear_day)}归还` : "投影内未提用"],
+                            ["甲借款峰值（一般 / 合计）", `${money(before.general_peak_A, 3)} / ${money(before.peak_A, 3)}万元`, `${money(after.general_peak_A, 3)} / ${money(after.peak_A, 3)}万元`],
+                            ["甲利息", num(before.interest_A) + "元", num(after.interest_A) + "元"],
+                            ["甲清偿 / 业务结清", `${date(before.settlement_day_A)} / ${date(before.business_settlement_day)}`, `${date(after.settlement_day_A)} / ${date(after.business_settlement_day)}`],
+                            ["专项到期余额", "—", money(after.tranche_due_at_maturity, 3) + "万元"],
+                          ]}
+                        />
+                      </>
+                    );
+                  })()}
+                  {signals.length ? (
+                    <ul className="signal-list">
+                      {signals.map((g) => (
+                        <li key={g.key}>
+                          <Tag tone={g.level === "关注" ? "red" : "amber"}>{g.level}</Tag> {g.text}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="footnote">当前执行投影与已登记材料未出现需要复核的情形。</p>
+                  )}
+                </Panel>
+              )}
             </>
           ) : (
             empty

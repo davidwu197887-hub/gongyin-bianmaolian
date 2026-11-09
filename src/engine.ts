@@ -3,6 +3,19 @@ export const PURCHASE_DAYS = [0, 9, 19, 31, 40];
 export const BASE_FINISH = [10, 20, 29, 42, 50];
 const FAR = 10000;
 const EPS = 1e-7;
+// 3.0：甲的批次专项额度（模拟）。只用于指定批次的采购付款，不可循环；
+// 提款窗口、到期日与“无逾期内部应收”条件均由银行模拟批准后写入。
+export interface Tranche {
+  party: "A";
+  limit: number;
+  batches: number[];
+  openDay: number;
+  closeDay: number;
+  maturityDay: number;
+  sourceBatch: number;
+  overdueCheck: "none" | "internal" | "chain";
+  freezeGeneralOnOverdue: boolean;
+}
 export interface Config {
   facility_changes?: {
     day: number;
@@ -10,6 +23,7 @@ export interface Config {
     limit: number;
     maturityDay: number;
   }[];
+  tranche?: Tranche | null;
   horizon: number;
   own_A: number;
   own_B: number;
@@ -152,6 +166,33 @@ export function validate(c: Config, p: Plan, s: Scenario) {
   if (p.terms && p.terms.length !== 5) throw Error("批次账期应包含五项");
   if (p.prepay_fraction * p.price > c.prepaid_per_tonne + c.logistics_per_tonne)
     throw Error("本模板的贸易预付款应在采购启动支出范围内");
+  const t = c.tranche;
+  if (t) {
+    if (t.party !== "A") throw Error("本演示的专项额度仅适用于合作组织甲");
+    if (!Number.isFinite(t.limit) || t.limit <= 0)
+      throw Error("专项额度应为正数");
+    if (
+      !t.batches.length ||
+      t.batches.some((j) => !Number.isSafeInteger(j) || j < 0 || j > 4)
+    )
+      throw Error("专项额度应指定第1—5批中的采购批次");
+    if (
+      ![t.openDay, t.closeDay, t.maturityDay].every(Number.isSafeInteger) ||
+      t.openDay < 0 ||
+      t.closeDay < t.openDay ||
+      t.maturityDay <= t.closeDay
+    )
+      throw Error("专项额度应满足：开放日≤提款截止日＜到期日");
+    if (
+      !Number.isSafeInteger(t.sourceBatch) ||
+      t.sourceBatch < 0 ||
+      t.sourceBatch > 4 ||
+      t.batches.includes(t.sourceBatch)
+    )
+      throw Error("还款来源应为与用款批次不同的已有批次");
+    if (!["none", "internal", "chain"].includes(t.overdueCheck))
+      throw Error("请选择逾期核对范围");
+  }
 }
 class Wallet {
   cash: number;
@@ -166,6 +207,12 @@ class Wallet {
   last_clear = -1;
   peak = 0;
   draw_enabled = true;
+  // 专项额度：tdebt 是 debt 中的专项部分；tlimit 为 0 时与 2.0 计算完全相同。
+  tlimit = 0;
+  tdebt = 0;
+  tdraws = 0;
+  tpeak = 0;
+  gpeak = 0;
   constructor(
     own: number,
     reserve: number,
@@ -175,24 +222,44 @@ class Wallet {
     this.cash = own - reserve;
     this.reserve = reserve;
   }
-  funds() {
+  general() {
+    return this.draw_enabled
+      ? Math.max(this.limit - (this.debt - this.tdebt), 0)
+      : 0;
+  }
+  funds(tranche = false) {
+    if (!this.tlimit)
+      return (
+        this.cash +
+        (this.draw_enabled ? Math.max(this.limit - this.debt, 0) : 0)
+      );
     return (
-      this.cash + (this.draw_enabled ? Math.max(this.limit - this.debt, 0) : 0)
+      this.cash +
+      this.general() +
+      (tranche ? Math.max(this.tlimit - this.tdraws, 0) : 0)
     );
   }
-  pay(amount: number, mask: boolean, full = true) {
+  pay(amount: number, mask: boolean, full = true, tranche = false) {
     if (!mask) return 0;
-    const available = this.funds();
+    const available = this.funds(tranche);
     const paid = full
       ? available + EPS >= amount
         ? amount
         : 0
       : Math.min(amount, available);
     const draw = Math.max(paid - this.cash, 0);
+    if (this.tlimit && tranche && draw > 0) {
+      // 先用一般额度剩余空间，不足部分才动用专项额度。
+      const t = Math.max(draw - this.general(), 0);
+      this.tdebt += t;
+      this.tdraws += t;
+      this.tpeak = Math.max(this.tpeak, this.tdebt);
+    }
     this.debt += draw;
     this.draws += draw;
     this.cash += draw - paid;
     this.peak = Math.max(this.peak, this.debt);
+    this.gpeak = Math.max(this.gpeak, this.debt - this.tdebt);
     return paid;
   }
   settleInterest(mask: boolean) {
@@ -212,6 +279,8 @@ class Wallet {
     this.cash -= repay;
     this.debt -= repay;
     this.repays += repay;
+    // 日终回笼资金优先归还专项部分。
+    if (this.tdebt > 0) this.tdebt = Math.max(this.tdebt - repay, 0);
     if (repay > EPS && this.debt < EPS) {
       this.settleInterest(true);
       if (this.interest_due < EPS) this.last_clear = day;
@@ -226,6 +295,9 @@ export interface DayRecord {
   A_cash: number;
   A_reserve: number;
   A_debt: number;
+  A_tranche_debt: number;
+  A_tranche_draws: number;
+  tranche_open: boolean;
   B_cash: number;
   B_reserve: number;
   B_debt: number;
@@ -327,6 +399,15 @@ export function simulate(
     maxError = 0,
     expiryA = c.limit_expiry,
     expiryB = c.limit_expiry;
+  const T = c.tranche ?? null;
+  if (T) A.tlimit = T.limit;
+  let trancheOK = false,
+    tailOK = false,
+    tranche_due_at_maturity = 0,
+    tranche_overdue_days = 0,
+    tranche_blocked_days = 0,
+    tranche_first_draw = -1,
+    tranche_clear_day = -1;
   const days: DayRecord[] = [],
     prefix: number[][] = [];
   let prefixAt = 0,
@@ -399,9 +480,11 @@ export function simulate(
           sum(g.map((k) => q[k])) *
             (c.prepaid_per_tonne + c.logistics_per_tonne) +
           c.setup_per_purchase,
-        need = amount - sum(g.map((k) => locked[k]));
-      if (A.funds() + EPS < need) continue;
-      const paid = A.pay(need, true);
+        need = amount - sum(g.map((k) => locked[k])),
+        useT =
+          trancheOK && !!T && g.every((k) => T.batches.includes(k));
+      if (A.funds(useT) + EPS < need) continue;
+      const paid = A.pay(need, true, true, useT);
       if (paid + 1e-5 < need) continue;
       Aexternal += amount;
       for (const k of g) {
@@ -428,7 +511,13 @@ export function simulate(
     for (let j = 0; j < b; j++) {
       const due =
         q[j] * (c.member_total_per_tonne - c.prepaid_per_tonne) - tail_paid[j];
-      const paid = A.pay(Math.max(due, 0), accepted[j] && due > EPS, false);
+      // 专项额度覆盖同一批次的成员收购尾款（该批采购既已获批融资，尾款属同一用途）。
+      const paid = A.pay(
+        Math.max(due, 0),
+        accepted[j] && due > EPS,
+        false,
+        tailOK && T!.batches.includes(j),
+      );
       tail_paid[j] += paid;
       Aexternal += paid;
     }
@@ -493,6 +582,48 @@ export function simulate(
       }
       w.draw_enabled = w.draw_enabled && day < (w === A ? expiryA : expiryB);
     }
+    if (T) {
+      // 日初判定专项提款条件；到期后仍有余额记为专项逾期。
+      if (day === T.maturityDay) tranche_due_at_maturity = A.tdebt;
+      if (day > T.maturityDay && A.tdebt > EPS) {
+        tranche_overdue_days++;
+        if (T.freezeGeneralOnOverdue) A.draw_enabled = false;
+      }
+      // internal：乙对甲有到期未付货款；chain：另含乙的下游客户到期未付。
+      const internalOverdue = q.some(
+          (v, j) =>
+            accepted[j] &&
+            internal_due[j] < day &&
+            v * p.price - advance_paid[j] - invoice_paid[j] > EPS,
+        ),
+        chainOverdue =
+          internalOverdue ||
+          q.some((_, j) => finished[j] && !down_paid[j] && external_due[j] < day),
+        overdue =
+          T.overdueCheck === "chain"
+            ? chainOverdue
+            : T.overdueCheck === "internal"
+              ? internalOverdue
+              : false,
+        // 还款来源批次须已验收，且其合同付款日早于专项到期日。
+        source =
+          accepted[T.sourceBatch] && internal_due[T.sourceBatch] < T.maturityDay;
+      // 所有专项提款（含该批成员尾款）都限定在提款窗口内。
+      tailOK =
+        day >= T.openDay &&
+        day <= T.closeDay &&
+        day < T.maturityDay &&
+        A.interest_due < EPS &&
+        A.tdraws < T.limit - EPS;
+      trancheOK =
+        day >= T.openDay &&
+        day <= T.closeDay &&
+        day < T.maturityDay &&
+        A.interest_due < EPS &&
+        A.tdraws < T.limit - EPS &&
+        source &&
+        !overdue;
+    }
     if (c.external_receipt_before_cutoff) receipts(day);
     obligations();
     advances(day);
@@ -554,6 +685,19 @@ export function simulate(
         c.freeze_new_draw_on_overdue_interest,
       );
     peak();
+    if (T) {
+      // 专项条件不满足、且指定批次日终仍未采购的天数。
+      if (
+        !trancheOK &&
+        day >= T.openDay &&
+        day <= T.closeDay &&
+        T.batches.some((j) => ordered[j] < 0 && earliest[j] <= day)
+      )
+        tranche_blocked_days++;
+      if (tranche_first_draw < 0 && A.tdraws > EPS) tranche_first_draw = day;
+      if (tranche_first_draw >= 0 && tranche_clear_day < 0 && A.tdebt < EPS)
+        tranche_clear_day = day;
+    }
     const activeA = A.debt + A.accrued + A.interest_due > EPS,
       activeB = B.debt + B.accrued + B.interest_due > EPS;
     if (activeA) loan_last_A = day;
@@ -617,6 +761,9 @@ export function simulate(
         A_cash: A.cash,
         A_reserve: A.reserve,
         A_debt: A.debt,
+        A_tranche_debt: A.tdebt,
+        A_tranche_draws: A.tdraws,
+        tranche_open: trancheOK,
         B_cash: B.cash,
         B_reserve: B.reserve,
         B_debt: B.debt,
@@ -728,6 +875,17 @@ export function simulate(
     actual_internal_paid: invoice_paid.map((x, j) => x + advance_paid[j]),
     actual_tail_paid: tail_paid,
     conservation_max_abs_error: maxError,
+    general_peak_A: T ? A.gpeak : A.peak,
+    tranche_limit: T ? T.limit : 0,
+    tranche_draws: A.tdraws,
+    tranche_peak: A.tpeak,
+    tranche_debt: A.tdebt,
+    tranche_due_at_maturity,
+    tranche_overdue_days,
+    tranche_blocked_days,
+    tranche_first_draw_day: tranche_first_draw,
+    tranche_clear_day:
+      tranche_first_draw < 0 ? -1 : tranche_clear_day < 0 ? Infinity : tranche_clear_day,
     snapshot,
     days,
     prefix,
