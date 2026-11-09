@@ -72,7 +72,7 @@ Python `export_financing_crosscheck.py` 导出11种安排 × 基准12000、严�
 
 | 项目 | 方法 | 结果 |
 | --- | --- | --- |
-| 源码可独立构建 | `git archive eea3150` 解压到全新目录（92个文件，不含 node_modules），`npm ci` 后运行 typecheck、`npm test`、`test:study`、`test:invariants`、`test:financing`、`build`、`test:e2e` | 全部通过；`dist/index.html` 1 950 708 字节，SHA-256 `d7b35375…026b390e`，与开发目录一致 |
+| 源码可独立构建 | 两次：`git archive eea3150`（92个文件）；交付的《Demo3.0_完整源码.zip》（最终提交，只比前者多交付文档）。均解压到全新目录（不含 node_modules），`npm ci` 后运行 typecheck、`npm test`、`test:study`、`test:invariants`、`test:financing`、`build`、`test:e2e` | 两次全部通过；`dist/index.html` 1 950 708 字节，SHA-256 `d7b35375…026b390e`，与开发目录一致（`测试日志/14_fresh_build.log`、`16_zip_acceptance.log`） |
 | 静态部署文件 | `python -m http.server` 托管部署目录，Edge 访问 `/`、`/demo.html`（桌面）、`/?scene=financing`、`/?scene=translate`（390×844） | 均200、`text/html`；除页面本身外没有其他请求；`?scene=financing` 计算线程完成3969条匹配对照；无横向溢出、无脚本错误 |
 | 根目录三份 HTML | SHA-256 | `index.html`、`dist/index.html`、`demo.html` 一致 |
 | GitHub | `git ls-remote`、GitHub API | `feature/financing-mode-v3` 已推送；PR #2（→ `feature/demo-v2-integration`）OPEN；`main` 仍为 `0fb4914`；2.0 分支仍为 `1c0eebc` |
