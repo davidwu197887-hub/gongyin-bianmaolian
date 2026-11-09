@@ -10,7 +10,11 @@
     "typecheck": "tsc --noEmit",
     "test": "node scripts/check-model.mjs && node scripts/check-workflow.mjs",
     "test:model": "node scripts/check-model.mjs",
-    "test:study": "node scripts/check-study.mjs"
+    "test:study": "node scripts/check-study.mjs",
+    "preview": "vite preview --host 127.0.0.1 --port 4173",
+    "test:invariants": "node scripts/check-invariants.mjs",
+    "test:crosscheck": "node scripts/check-crosscheck.mjs",
+    "test:e2e": "playwright test && node scripts/sanitize-e2e-report.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

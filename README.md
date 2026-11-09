@@ -53,27 +53,53 @@ P90、P95和覆盖比例为所声明情景下的条件统计。界面保留参�
 
 ## 本地开发与验证
 
-Node.js 22.12及以上：
+Node.js 22.12及以上（2026-11-09 实测 22.22.2 / npm 10.9.7）：
 
 ```sh
 npm ci
-npm run dev
-npm run typecheck
-npm test
-npm run test:study
-npm run build
+npm run typecheck        # TypeScript 类型检查
+npm test                 # 30条 Python 参考路径对照 + 33项业务流程检查
+npm run test:study       # 12000条情景与第20日历史匹配
+npm run test:invariants  # 资金守恒、批次、额度约束与贯穿案例关键数值
+npm run build            # 生成单文件 dist/index.html 与 demo.html
+npm run test:e2e         # 浏览器测试（基于 dist/，默认 Windows Edge）
+npm run preview          # 本地预览构建产物 http://127.0.0.1:4173/
 ```
 
-`npm run build`重新打包计算线程与页面，生成单文件HTML。构建所需第三方包由包管理器安装，运行时不依赖外部CDN。
+`npm run build` 先把计算线程打包进 `src/workerCode.ts`，再生成单文件 HTML。`index.html` 是已构建的单文件入口，`npm run dev` 打开的是这份构建结果；修改源码后请重新 `npm run build` 再预览。
+
+浏览器测试默认调用 Windows Edge。其他平台设置 `BROWSER_CHANNEL`、`BROWSER_EXECUTABLE`，或运行 `npx playwright install chromium`。
+
+### Python 离线模型对照
+
+`model/` 存放与前端共用参数和情景样本的 Python 参考模型（Python 3.12+，依赖见 `model/requirements.txt`）：
+
+```sh
+python -m pip install -r model/requirements.txt
+python model/run_study.py            # 完整研究，结果写入 model/results/
+python model/export_web_reference.py # 重新生成 src/scenarios.ts、tests/reference.json 等
+python model/export_crosscheck.py    # 导出 24 组逐路径结果
+npm run test:crosscheck              # 前端引擎与 Python 逐路径对照
+```
+
+`export_web_reference.py` 运行后用 `git diff` 检查，前端情景输入与参考路径应无变化。`model/expected/study_results.json` 是交付基准，可与新的 `model/results/study_results.json` 比较。
 
 ## 目录
 
 - `src/engine.ts`：资金约束下的五批事件仿真。
 - `src/workflow.ts`：规则、确认、证据、银行反馈及成员核对。
-- `src/study.ts`、`src/worker.ts`：共同样本分析与历史匹配。
-- `src/scenarios.ts`：情景输入数据。
+- `src/study.ts`、`src/worker.ts`：共同样本分析与历史匹配；`src/workerCode.ts` 为构建生成的计算线程代码。
+- `src/scenarios.ts`：情景输入数据，由 `model/export_web_reference.py` 生成。
 - `src/main.tsx`、`src/styles.css`：页面与交互。
-- `tests/reference.json`：独立参考路径与结果。
-- `verification/`：参考模型、参考研究结果和本版本实际核验记录。
+- `tests/reference.json`：Python 参考路径与结果。
+- `scripts/`：构建脚本与各项检查。
+- `e2e/`：浏览器端交互、布局与离线文件测试。
+- `model/`：Python 参考模型、交付基准与对照导出脚本。
+- `verification/`：参考模型副本、参考研究结果，以及最近一次运行生成的检查结果。
+
+## 版本
+
+- 2.0.0（本分支 `feature/demo-v2-integration`）：五批连续经营现金流仿真、双主体资金约束、情景与历史匹配、独立风险核查与模拟银行反馈。新旧差异见 `CHANGELOG.md`，本次实际测试见 `VERIFICATION.md`。
+- 1.0.0（`main`，提交 `0fb4914`，2026-10-08）：初赛演示版，188/12吨分批情景。可用 `git checkout 0fb4914` 回到该版本。
 
 公开发布时保留 `THIRD_PARTY_NOTICES.txt` 中的第三方许可。
