@@ -1,0 +1,206 @@
+{
+  "status": "PASS",
+  "checks": 28,
+  "results": [
+    {
+      "name": "2.0 基准不变：规划17.064→30.672万元、待筹10.672万元",
+      "status": "PASS",
+      "detail": {
+        "before": 17.064,
+        "after": 30.672
+      }
+    },
+    {
+      "name": "2.0 基准不变：受限执行第五批40→42日、回款65→68日、清偿44→54日",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "不传入专项时结果与未设字段完全相同",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "方案说明：第五批用款、第3批还款来源、额度区间与期限由计算得出",
+      "status": "PASS",
+      "detail": {
+        "lower": 10.672,
+        "upper": 13.608,
+        "window": [
+          21,
+          50,
+          62
+        ]
+      }
+    },
+    {
+      "name": "无草案时不形成专项方案；规划口径无缺口",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "提款条件逐项列出；草案未生效、乙未确认时为待满足",
+      "status": "PASS",
+      "detail": {
+        "rule": "待满足",
+        "accept": "待满足",
+        "due": "满足",
+        "confirm": "待满足",
+        "purchase": "待满足",
+        "overdue": "满足",
+        "interest": "满足"
+      }
+    },
+    {
+      "name": "安排对照：一般提额与专项在确定性路径上第五批均第40日采购",
+      "status": "PASS",
+      "detail": [
+        [
+          "current",
+          40,
+          170640,
+          226.58,
+          0
+        ],
+        [
+          "draft",
+          42,
+          174640,
+          532.34,
+          0
+        ],
+        [
+          "general",
+          40,
+          306720,
+          565.34,
+          1089
+        ],
+        [
+          "tranche",
+          40,
+          306720,
+          565.34,
+          285.8
+        ]
+      ]
+    },
+    {
+      "name": "专项只能由甲提交；乙未确认应付时银行不能批准",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "乙确认应付仅限乙角色；重复确认幂等",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "专项申请记录结构与方案快照",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "防重复融资：同一依据不能再提交专项或一般额度申请",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "银行条件校验：超额度、到期早于回款、晚于一般额度到期、截止早于生效均拒绝",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "经营主体不能作出或改写银行结论",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "审批后、回执前不提款：专项未进入执行投影",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "经营主体不能回填回执",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "回执回填：专项自第21日可提，依据为 Draft-V2",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "已办结事项不能被改写",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "草案未生效前，专项不进入执行投影，原规则照常执行",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "草案生效后按获批条件执行：第五批第40日采购，专项第40日提用10.672万元、第42日归还",
+      "status": "PASS",
+      "detail": {
+        "draw": 10.672,
+        "interest": 565.34
+      }
+    },
+    {
+      "name": "不用未到账回款支付现实支出：第40、41日专项余额在第3批货款到账前保持",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "一般额度部分不超过20万元，专项累计提款不超过获批额度",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "专项提款与归还形成唯一的模拟银行凭证",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "生效专项存续期间不能再提交新的专项",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "确定性基准下无复核提示",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "证据标为存在差异时生成复核提示，且不改变专项与借款",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "下游持续拖欠：复核提示给出下游逾期与专项到期余额",
+      "status": "PASS",
+      "detail": {
+        "draw": 11.072,
+        "dueAtMaturity": 3.5,
+        "overdueDays": 118
+      }
+    },
+    {
+      "name": "一般额度调整（2.0 流程）仍可选择，回执写入 facilityChanges",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "全情景不变量：专项窗口外不提款、一般部分不超额度、专项不超获批、资金守恒、现金非负",
+      "status": "PASS",
+      "detail": {
+        "paths": 24000,
+        "dayRows": 4344000,
+        "drawnPaths": 23553,
+        "maxConservation": 1.1641532182693481e-10
+      }
+    }
+  ]
+}

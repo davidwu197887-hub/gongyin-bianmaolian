@@ -154,6 +154,9 @@ def main():
         out['amount_sweep'] = out.get('amount_sweep', {}); out['amount_sweep'][name] = sweep
         print(name, len(s['q']), 'done', flush=True)
     (OUT / 'financing_study.json').write_text(json.dumps(clean(out), ensure_ascii=False, indent=1), encoding='utf-8')
+    # 提交到仓库的参考副本，供 scripts/check-financing-study.mjs 与浏览器计算线程对照。
+    (R.parent / 'verification/financing_reference.json').write_text(
+        json.dumps(clean(out), ensure_ascii=False, indent=1), encoding='utf-8', newline='\n')
     print('PASS financing study; matched paths', len(idx))
 
 

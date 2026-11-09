@@ -608,7 +608,10 @@ export function simulate(
         // 还款来源批次须已验收，且其合同付款日早于专项到期日。
         source =
           accepted[T.sourceBatch] && internal_due[T.sourceBatch] < T.maturityDay;
+      // 所有专项提款（含该批成员尾款）都限定在提款窗口内。
       tailOK =
+        day >= T.openDay &&
+        day <= T.closeDay &&
         day < T.maturityDay &&
         A.interest_due < EPS &&
         A.tdraws < T.limit - EPS;

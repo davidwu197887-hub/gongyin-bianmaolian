@@ -1,0 +1,18 @@
+{
+  "status": "PASS",
+  "checks": 129,
+  "samples": {
+    "matched_day20": {
+      "retained": 3969,
+      "seconds": 5.777
+    },
+    "base_12000": {
+      "retained": 12000,
+      "seconds": 9.511
+    },
+    "severe_6000": {
+      "retained": 6000,
+      "seconds": 10.198
+    }
+  }
+}

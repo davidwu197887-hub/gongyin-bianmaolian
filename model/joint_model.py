@@ -343,8 +343,9 @@ def simulate(p:Plan,c:Config,s:dict,snapshot_day=20,trace=False,financing=None):
             overdue={'chain':chain,'internal':internal}.get(T['overdueCheck'],np.zeros(n,bool))
             sb=T['sourceBatch']
             source=accepted[:,sb]&(internal_due[:,sb]<T['maturityDay'])
-            tail_ok=(day<T['maturityDay'])&(A.interest_due<1e-7)&(A.tdraws<T['limit']-1e-7)
+            # All tranche draws, including the batch's member tail, stay inside the drawdown window.
             window=T['openDay']<=day<=T['closeDay'] and day<T['maturityDay']
+            tail_ok=window&(A.interest_due<1e-7)&(A.tdraws<T['limit']-1e-7)
             tranche_ok=window&(A.interest_due<1e-7)&(A.tdraws<T['limit']-1e-7)&source&~overdue
         if c.external_receipt_before_cutoff:external_receipts(day)
         pay_A_obligations(day)
