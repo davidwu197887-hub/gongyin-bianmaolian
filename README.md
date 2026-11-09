@@ -95,6 +95,7 @@ npm run test:crosscheck              # 前端引擎与 Python 逐路径对照
 - `scripts/`：构建脚本与各项检查。
 - `e2e/`：浏览器端交互、布局与离线文件测试。
 - `model/`：Python 参考模型、交付基准与对照导出脚本。
+- `CHANGELOG.md`、`VERIFICATION.md`、`PROJECT_HANDOFF.md`、`DEPLOY_CLOUDBASE.md`：版本差异、测试记录、工程交接与静态托管部署说明。
 - `verification/`：参考模型副本、参考研究结果，以及最近一次运行生成的检查结果。
 
 ## 版本
