@@ -4,15 +4,15 @@
   "samples": {
     "matched_day20": {
       "retained": 3969,
-      "seconds": 5.777
+      "seconds": 11.853
     },
     "base_12000": {
       "retained": 12000,
-      "seconds": 9.511
+      "seconds": 18.695
     },
     "severe_6000": {
       "retained": 6000,
-      "seconds": 10.198
+      "seconds": 9.519
     }
   }
 }

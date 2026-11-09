@@ -1,5 +1,7 @@
 # PROJECT_HANDOFF：工银边贸智链 Demo 2.0 工程交接
 
+> 3.0（`feature/financing-mode-v3`）的工程交接见 `docs/v3/PROJECT_HANDOFF_V3.md`。本文件记录 2.0 现状，保留原文。
+
 编写：ClawsGO Science Agent，2026-11-09。供下一阶段授信模式研发使用。本文只描述 Demo 2.0 现状，不包含新的授信模式设计。
 
 ## 1. 版本与位置

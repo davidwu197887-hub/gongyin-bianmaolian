@@ -60,8 +60,8 @@ Node.js 22.12及以上（2026-11-09 实测 22.22.2 / npm 10.9.7）：
 ```sh
 npm ci
 npm run typecheck        # TypeScript 类型检查
-npm test                 # 30条 Python 参考路径对照 + 33项业务流程检查 + 28项批次专项流程与全情景不变量
-npm run test:financing   # 同上28项，另加浏览器计算线程的融资安排情景统计与 Python 对照（129项）
+npm test                 # 30条 Python 参考路径对照 + 33项业务流程检查 + 29项批次专项流程与全情景不变量
+npm run test:financing   # 同上29项，另加浏览器计算线程的融资安排情景统计与 Python 对照（129项）
 npm run test:study       # 12000条情景与第20日历史匹配
 npm run test:invariants  # 资金守恒、批次、额度约束与贯穿案例关键数值
 npm run build            # 生成单文件 dist/index.html 与 demo.html

@@ -180,6 +180,18 @@ check("草案生效后按获批条件执行：第五批第40日采购，专项�
   assert.equal(r.days[20].A_debt, 146640);
   return { draw: wan(r.tranche_draws), interest: +r.interest_A.toFixed(2) };
 });
+check("专项足额时执行路径与 2.0 规划口径（不设额度）逐日相同：借款、现金、利息565.34元", () => {
+  const plan = simulate(draft, planningConfig(defaultConfig), deterministic(), { trace: true });
+  for (let d = 0; d <= 180; d++) {
+    assert.ok(Math.abs(r.days[d].A_debt - plan.days[d].A_debt) < 1e-6, "A_debt day " + d);
+    assert.ok(Math.abs(r.days[d].A_cash - plan.days[d].A_cash) < 1e-6, "A_cash day " + d);
+    assert.ok(Math.abs(r.days[d].B_debt - plan.days[d].B_debt) < 1e-6, "B_debt day " + d);
+  }
+  assert.ok(Math.abs(r.interest_A - plan.interest_A) < 1e-9);
+  assert.equal(+r.interest_A.toFixed(2), 565.34);
+  assert.equal(plan.peak_A, 306720);
+  return { interestA: +r.interest_A.toFixed(2), planningPeak: wan(plan.peak_A) };
+});
 check("不用未到账回款支付现实支出：第40、41日专项余额在第3批货款到账前保持", () => {
   assert.equal(r.days[39].A_tranche_debt, 0);
   assert.equal(r.days[40].A_tranche_debt, 106720);
