@@ -1,0 +1,91 @@
+{
+  "seed_base": 20261106,
+  "paths_base": 12000,
+  "seed_mild_severe": 20261107,
+  "paths_mild_severe": 6000,
+  "bin_days": 10,
+  "state_bins": 21,
+  "initial_probabilities": {
+    "base": [
+      0.8,
+      0.14,
+      0.05,
+      0.01
+    ],
+    "mild": [
+      0.9,
+      0.08,
+      0.018,
+      0.002
+    ],
+    "severe": [
+      0.65,
+      0.22,
+      0.1,
+      0.03
+    ]
+  },
+  "base_transition": [
+    [
+      0.8,
+      0.14,
+      0.05,
+      0.01
+    ],
+    [
+      0.35,
+      0.45,
+      0.16,
+      0.04
+    ],
+    [
+      0.18,
+      0.35,
+      0.35,
+      0.12
+    ],
+    [
+      0.12,
+      0.23,
+      0.35,
+      0.3
+    ]
+  ],
+  "sensitivity_transition": ".65 * base_transition + .35 * initial_probability[None,:]",
+  "border_state_delay_days": [
+    0,
+    4,
+    10,
+    18
+  ],
+  "downstream_state_delay_days": [
+    0,
+    3,
+    10,
+    20
+  ],
+  "batch_border_delay_days": [
+    0,
+    2,
+    5,
+    12
+  ],
+  "batch_border_probabilities": [
+    0.65,
+    0.25,
+    0.08,
+    0.02
+  ],
+  "batch_downstream_delay_days": [
+    0,
+    2,
+    5
+  ],
+  "batch_downstream_probabilities": [
+    0.8,
+    0.15,
+    0.05
+  ],
+  "quantity_variation": "uniform(0.99,1.01) per batch; normalise row total to 200 tonnes",
+  "interpretation": "Scenario assumptions; not calibrated empirical default probabilities."
+}

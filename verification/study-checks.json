@@ -1,0 +1,15 @@
+{
+  "status": "PASS",
+  "checks": 13,
+  "priorPaths": 12000,
+  "retainedPaths": 3969,
+  "elapsedSeconds": 7.175,
+  "prior": {
+    "A90": 308584,
+    "B90": 307400
+  },
+  "rolling": {
+    "original": 176992,
+    "draft": 307584
+  }
+}

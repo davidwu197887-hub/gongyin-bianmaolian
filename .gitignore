@@ -1,0 +1,16 @@
+node_modules/
+.vite/
+verification/engine.mjs
+verification/test-bundle.mjs
+.DS_Store
+verification/study.mjs
+verification/workflow.mjs
+test-results/
+playwright-report/
+__pycache__/
+.venv/
+model/results/
+model/article_outputs/
+model/validation/
+model/inputs/*.npz
+model/inputs/*.csv

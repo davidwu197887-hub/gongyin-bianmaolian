@@ -1,0 +1,4 @@
+# 统一使用 LF，保证不同系统检出后 npm run build 生成的单文件 HTML 字节一致
+* text=auto eol=lf
+*.png binary
+*.npz binary
